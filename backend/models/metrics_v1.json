@@ -1,0 +1,26 @@
+{
+  "timestamp": "2026-09-03T17:43:58.997036",
+  "model_version": "v1",
+  "dataset_size": 1000,
+  "features": [
+    "amount",
+    "historical_tx_count",
+    "historical_avg_amount",
+    "amount_deviation",
+    "is_new_device",
+    "device_customer_count",
+    "ip_customer_count"
+  ],
+  "metrics": {
+    "model": "XGBoost",
+    "precision": 0.8,
+    "recall": 0.5,
+    "f1": 0.6153846153846154,
+    "roc_auc": 0.8436316287878789,
+    "pr_auc": 0.715625324238994,
+    "tn": 173.0,
+    "fp": 3.0,
+    "fn": 12.0,
+    "tp": 12.0
+  }
+}
