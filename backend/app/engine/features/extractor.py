@@ -91,12 +91,24 @@ async def extract_features(db: AsyncSession, request: PaymentRequest) -> Feature
     context.failed_payment_sequence = fails
 
     # 4. Device Stats
+    # Note: payment_service creates the Device row BEFORE calling evaluate_transaction,
+    # so checking Device existence would always return True for this request's device.
+    # Instead we check whether this device has a prior *completed* transaction for this customer.
     if request.device and request.device.device_fingerprint:
         res = await db.execute(select(Device.id).filter(Device.device_fingerprint == request.device.device_fingerprint))
         device_id = res.scalar()
         if device_id:
-            context.is_new_device = False
-            # Check how many distinct customers used this device
+            # is_new_device = True if this customer has NEVER completed a tx with this device before
+            res = await db.execute(
+                select(func.count(Transaction.id))
+                .where(Transaction.device_id == device_id)
+                .where(Transaction.customer_id == customer_id)
+                .where(Transaction.status == "completed")
+            )
+            prior_txns = res.scalar() or 0
+            context.is_new_device = prior_txns == 0
+
+            # Check how many distinct customers used this device (for shared_device signal)
             res = await db.execute(
                 select(func.count(func.distinct(Transaction.customer_id)))
                 .where(Transaction.device_id == device_id)
@@ -112,15 +124,18 @@ async def extract_features(db: AsyncSession, request: PaymentRequest) -> Feature
         context.ip_customer_count = res.scalar() or 1
         
     # 6. Geolocation
-    # We will define the "home" location as the average of the last 10 successful transactions
-    res = await db.execute(
-        select(func.avg(Transaction.latitude), func.avg(Transaction.longitude))
+    subq = (
+        select(Transaction.latitude, Transaction.longitude)
         .where(Transaction.customer_id == customer_id)
         .where(Transaction.latitude != None)
         .where(Transaction.longitude != None)
         .where(Transaction.status == 'completed')
         .order_by(Transaction.created_at.desc())
         .limit(10)
+        .subquery()
+    )
+    res = await db.execute(
+        select(func.avg(subq.c.latitude), func.avg(subq.c.longitude))
     )
     home_lat, home_lon = res.first()
     

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import func, desc, asc
@@ -11,6 +11,12 @@ from app.models import Transaction, Customer, Merchant, Device
 from app.models.risk import RiskEvaluation
 from app.schemas import PaymentRequest, TransactionResponse
 from pydantic import BaseModel
+from app.security.auth import get_current_user, require_analyst, CurrentUser
+from app.security.rate_limit import limiter
+from app.security.sanitizer import guard_prompt_injection, sanitize_string
+from app.security.idempotency import check_idempotency, cache_idempotency_response
+from app.observability.metrics import llm_request_duration_seconds, llm_failures_total
+import time
 
 router = APIRouter()
 
@@ -27,7 +33,9 @@ class PagedTransactions(BaseModel):
 
 
 @router.get("", response_model=PagedTransactions)
+@limiter.limit("120/minute")
 async def list_payments(
+    request: Request,
     page: int  = Query(1, ge=1),
     size: int  = Query(20, ge=1, le=200),
     search: Optional[str]  = Query(None),
@@ -35,7 +43,8 @@ async def list_payments(
     decision: Optional[str]   = Query(None),
     sort: Optional[str]   = Query("created_at"),
     order: Optional[str]  = Query("desc"),
-    db: AsyncSession = Depends(deps.get_db)
+    db: AsyncSession = Depends(deps.get_db),
+    user: CurrentUser = Depends(get_current_user)
 ) -> Any:
     q = (
         select(Transaction)
@@ -52,18 +61,16 @@ async def list_payments(
             q = q.join(RiskEvaluation, Transaction.id == RiskEvaluation.transaction_id)\
                  .filter(RiskEvaluation.decision == decision)
     if search:
-        q = q.filter(Transaction.external_transaction_id.ilike(f"%{search}%"))
+        search_safe = sanitize_string(search, max_length=100)
+        q = q.filter(Transaction.external_transaction_id.ilike(f"%{search_safe}%"))
 
-    # Count total
     count_q = select(func.count()).select_from(q.subquery())
     total_result = await db.execute(count_q)
     total = total_result.scalar() or 0
 
-    # Sort
     sort_col = getattr(Transaction, sort, Transaction.created_at)
     q = q.order_by(desc(sort_col) if order == "desc" else asc(sort_col))
 
-    # Paginate
     q = q.offset((page - 1) * size).limit(size)
     result = await db.execute(q)
     items = result.scalars().all()
@@ -78,7 +85,12 @@ async def list_payments(
 
 
 @router.get("/summary")
-async def get_summary(db: AsyncSession = Depends(deps.get_db)) -> Any:
+@limiter.limit("60/minute")
+async def get_summary(
+    request: Request,
+    db: AsyncSession = Depends(deps.get_db),
+    user: CurrentUser = Depends(get_current_user)
+) -> Any:
     result = await db.execute(
         select(Transaction).options(selectinload(Transaction.risk_evaluation))
     )
@@ -102,107 +114,36 @@ async def get_summary(db: AsyncSession = Depends(deps.get_db)) -> Any:
     }
 
 @router.post("", response_model=TransactionResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit("30/minute")
 async def create_payment(
-    request: PaymentRequest,
-    db: AsyncSession = Depends(deps.get_db)
+    request: Request,
+    payload: PaymentRequest,
+    db: AsyncSession = Depends(deps.get_db),
+    cached_response: Optional[dict] = Depends(check_idempotency),
+    user: CurrentUser = Depends(get_current_user)
 ) -> Any:
-    # 1. Get or create Customer
-    customer = None
-    if request.customer:
-        res = await db.execute(select(Customer).filter(Customer.external_customer_id == request.customer.external_customer_id))
-        customer = res.scalars().first()
-        if not customer:
-            customer = Customer(
-                external_customer_id=request.customer.external_customer_id,
-                account_created_at=request.customer.account_created_at,
-                status=request.customer.status
-            )
-            db.add(customer)
-            await db.flush()
-            
-    # 2. Get or create Merchant
-    merchant = None
-    if request.merchant:
-        res = await db.execute(select(Merchant).filter(Merchant.external_merchant_id == request.merchant.external_merchant_id))
-        merchant = res.scalars().first()
-        if not merchant:
-            merchant = Merchant(
-                external_merchant_id=request.merchant.external_merchant_id,
-                category=request.merchant.category,
-                status=request.merchant.status
-            )
-            db.add(merchant)
-            await db.flush()
-            
-    # 3. Get or create Device
-    device = None
-    if request.device:
-        res = await db.execute(select(Device).filter(Device.device_fingerprint == request.device.device_fingerprint))
-        device = res.scalars().first()
-        if not device:
-            device = Device(
-                device_fingerprint=request.device.device_fingerprint,
-                device_type=request.device.device_type,
-                operating_system=request.device.operating_system
-            )
-            db.add(device)
-            await db.flush()
-            
-    # 4. Evaluate Risk synchronously
-    from app.engine.evaluator import evaluate_transaction
-    from app.models.risk import RiskEvaluation
+    if cached_response:
+        return cached_response
+
+    from app.services.payment_service import process_payment
+    transaction = await process_payment(db, payload)
     
-    risk_result = await evaluate_transaction(db, request)
+    response_model = TransactionResponse.model_validate(transaction)
     
-    # 5. Create Transaction
-    # If decision is BLOCK, we might mark status as failed/blocked
-    final_status = "blocked" if risk_result.decision == "BLOCK" else "completed"
-    
-    transaction = Transaction(
-        external_transaction_id=request.external_transaction_id,
-        customer_id=customer.id if customer else None,
-        merchant_id=merchant.id if merchant else None,
-        device_id=device.id if device else None,
-        amount=request.amount,
-        currency=request.currency,
-        payment_method=request.payment_method,
-        ip_address=request.ip_address,
-        country=request.country,
-        city=request.city,
-        latitude=request.latitude,
-        longitude=request.longitude,
-        status=final_status
-    )
-    db.add(transaction)
-    await db.flush()  # To get transaction.id
-    
-    # 6. Save Risk Evaluation
-    risk_eval = RiskEvaluation(
-        transaction_id=transaction.id,
-        score=risk_result.score,
-        risk_level=risk_result.risk_level.value,
-        decision=risk_result.decision.value,
-        signals=[s.model_dump() for s in risk_result.signals]
-    )
-    db.add(risk_eval)
-    
-    await db.commit()
-    await db.refresh(transaction)
-    
-    # Need to load the relationship so it appears in the response
-    # We can just assign it to the Pydantic schema manually or let ORM handle it if we used joinedload
-    # Given we just created it, it's safer to attach it for the response model
-    await db.refresh(risk_eval)
-    transaction.risk_evaluation = risk_eval
+    idempotency_key = getattr(request.state, "idempotency_key", None)
+    if idempotency_key:
+        await cache_idempotency_response(idempotency_key, response_model.model_dump(mode='json'))
     
     return transaction
 
 @router.get("/{transaction_id}", response_model=TransactionResponse)
+@limiter.limit("120/minute")
 async def get_payment(
+    request: Request,
     transaction_id: uuid.UUID,
-    db: AsyncSession = Depends(deps.get_db)
+    db: AsyncSession = Depends(deps.get_db),
+    user: CurrentUser = Depends(get_current_user)
 ) -> Any:
-    from sqlalchemy.orm import selectinload
     result = await db.execute(
         select(Transaction)
         .options(selectinload(Transaction.risk_evaluation))
@@ -210,15 +151,17 @@ async def get_payment(
     )
     transaction = result.scalars().first()
     if not transaction:
-        raise HTTPException(status_code=404, detail="Transaction not found")
+        raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Transaction not found"})
     return transaction
 
 @router.get("/{transaction_id}/investigate")
+@limiter.limit("10/minute")
 async def investigate_payment(
+    request: Request,
     transaction_id: uuid.UUID,
-    db: AsyncSession = Depends(deps.get_db)
+    db: AsyncSession = Depends(deps.get_db),
+    user: CurrentUser = Depends(require_analyst)
 ) -> Any:
-    from sqlalchemy.orm import selectinload
     from app.ai.investigator import investigate_transaction
     
     result = await db.execute(
@@ -228,7 +171,17 @@ async def investigate_payment(
     )
     transaction = result.scalars().first()
     if not transaction:
-        raise HTTPException(status_code=404, detail="Transaction not found")
+        raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Transaction not found"})
         
-    report = await investigate_transaction(transaction, transaction.risk_evaluation)
-    return report
+    # Guard against prompt injection in free text fields (e.g. city) before feeding to LLM
+    if transaction.city:
+        transaction.city = guard_prompt_injection(transaction.city)
+    
+    start = time.perf_counter()
+    try:
+        report = await investigate_transaction(transaction, transaction.risk_evaluation)
+        llm_request_duration_seconds.labels(method="GET", path="/investigate").observe(time.perf_counter() - start)
+        return report
+    except Exception as e:
+        llm_failures_total.inc()
+        raise e

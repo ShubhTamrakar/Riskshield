@@ -1,0 +1,74 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+*.egg
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+
+# Environment files (NEVER commit secrets)
+.env.local
+.env.*.local
+backend/.env
+*.env
+
+# SQLite
+*.db
+*.sqlite3
+
+# Alembic (keep versions, ignore pycache)
+backend/alembic/versions/__pycache__/
+backend/alembic/__pycache__/
+
+# Logs
+*.log
+logs/
+
+# ML model artifacts (large binary; regenerate with train_model.py)
+backend/app/engine/model/*.pkl
+backend/app/engine/model/*.joblib
+
+# Node / Next.js
+node_modules/
+frontend/.next/
+frontend/out/
+frontend/.turbo/
+frontend/build/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Docker volumes (not code)
+postgres_data/
+redis_data/
+
+# Pytest cache
+.pytest_cache/
+.coverage
+htmlcov/
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Ruff / black
+.ruff_cache/
