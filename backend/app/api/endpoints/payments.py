@@ -9,6 +9,7 @@ import uuid
 from app.api import deps
 from app.models import Transaction, Customer, Merchant, Device
 from app.models.risk import RiskEvaluation
+from app.models.ground_truth import GroundTruth
 from app.schemas import PaymentRequest, TransactionResponse
 from pydantic import BaseModel
 from app.security.auth import get_current_user, require_analyst, CurrentUser
@@ -48,6 +49,8 @@ async def list_payments(
 ) -> Any:
     q = (
         select(Transaction)
+        .outerjoin(GroundTruth, Transaction.id == GroundTruth.transaction_id)
+        .filter(GroundTruth.id.is_(None))
         .options(selectinload(Transaction.risk_evaluation))
     )
 
@@ -92,7 +95,11 @@ async def get_summary(
     user: CurrentUser = Depends(get_current_user)
 ) -> Any:
     # 1. Total transactions
-    total = await db.scalar(select(func.count(Transaction.id))) or 0
+    total = await db.scalar(
+        select(func.count(Transaction.id))
+        .outerjoin(GroundTruth, Transaction.id == GroundTruth.transaction_id)
+        .filter(GroundTruth.id.is_(None))
+    ) or 0
     
     # 2. Grouped counts
     dist = {"LOW": 0, "MEDIUM": 0, "HIGH": 0, "CRITICAL": 0}
@@ -100,6 +107,9 @@ async def get_summary(
     
     level_counts = await db.execute(
         select(RiskEvaluation.risk_level, func.count(RiskEvaluation.id))
+        .join(Transaction, RiskEvaluation.transaction_id == Transaction.id)
+        .outerjoin(GroundTruth, Transaction.id == GroundTruth.transaction_id)
+        .filter(GroundTruth.id.is_(None))
         .group_by(RiskEvaluation.risk_level)
     )
     for level, count in level_counts:
@@ -109,6 +119,9 @@ async def get_summary(
             
     decision_counts = await db.execute(
         select(RiskEvaluation.decision, func.count(RiskEvaluation.id))
+        .join(Transaction, RiskEvaluation.transaction_id == Transaction.id)
+        .outerjoin(GroundTruth, Transaction.id == GroundTruth.transaction_id)
+        .filter(GroundTruth.id.is_(None))
         .group_by(RiskEvaluation.decision)
     )
     for decision, count in decision_counts:
