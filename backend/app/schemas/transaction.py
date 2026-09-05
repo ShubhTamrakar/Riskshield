@@ -39,6 +39,12 @@ class TransactionResponse(BaseModel):
     status: str
     created_at: datetime
     
+    ip_address: Optional[str] = None
+    country: Optional[str] = None
+    city: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    
     risk_evaluation: Optional['RiskEvaluationResponse'] = None
     
     model_config = ConfigDict(from_attributes=True)
