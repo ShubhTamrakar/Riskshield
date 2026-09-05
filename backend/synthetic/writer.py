@@ -21,6 +21,8 @@ async def bulk_write_dataset(
     """
     if clear_existing:
         logger.info("Clearing existing data...")
+        from app.models.risk import RiskEvaluation
+        await session.execute(delete(RiskEvaluation))
         await session.execute(delete(GroundTruth))
         await session.execute(delete(Transaction))
         await session.execute(delete(Device))

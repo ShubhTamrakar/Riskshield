@@ -15,13 +15,13 @@ def aggregate_signals(signals: List[RiskSignal]) -> RiskEvaluationResult:
     # Simple weighted aggregation based on severity
     for signal in signals:
         if signal.severity == RiskLevel.CRITICAL:
-            score += 60 * signal.value
+            score += 100 * signal.value
         elif signal.severity == RiskLevel.HIGH:
-            score += 30 * signal.value
+            score += 75 * signal.value
         elif signal.severity == RiskLevel.MEDIUM:
-            score += 15 * signal.value
+            score += 45 * signal.value
         elif signal.severity == RiskLevel.LOW:
-            score += 5 * signal.value
+            score += 15 * signal.value
             
     # Cap score at 100
     final_score = min(int(round(score)), 100)

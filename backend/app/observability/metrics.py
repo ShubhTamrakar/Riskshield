@@ -39,6 +39,7 @@ failed_risk_evaluations_total = Counter(
 llm_request_duration_seconds = Histogram(
     "riskshield_llm_request_duration_seconds",
     "LLM investigation call latency",
+    ["method", "path"],
     buckets=[0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 30.0],
 )
 

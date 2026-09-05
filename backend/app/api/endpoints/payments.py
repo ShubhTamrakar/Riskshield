@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy import func, desc, asc
+from sqlalchemy import func, desc, asc, or_
 from sqlalchemy.orm import selectinload
 from typing import Any, List, Optional
 import uuid
@@ -85,7 +85,7 @@ async def list_payments(
 
 
 @router.get("/summary")
-@limiter.limit("60/minute")
+@limiter.limit("300/minute")
 async def get_summary(
     request: Request,
     db: AsyncSession = Depends(deps.get_db),
@@ -158,16 +158,22 @@ async def get_payment(
 @limiter.limit("10/minute")
 async def investigate_payment(
     request: Request,
-    transaction_id: uuid.UUID,
+    transaction_id: str,
     db: AsyncSession = Depends(deps.get_db),
     user: CurrentUser = Depends(require_analyst)
 ) -> Any:
     from app.ai.investigator import investigate_transaction
     
+    try:
+        uuid_obj = uuid.UUID(transaction_id)
+        filter_expr = or_(Transaction.id == uuid_obj, Transaction.external_transaction_id == transaction_id)
+    except ValueError:
+        filter_expr = Transaction.external_transaction_id == transaction_id
+        
     result = await db.execute(
         select(Transaction)
         .options(selectinload(Transaction.risk_evaluation))
-        .filter(Transaction.id == transaction_id)
+        .filter(filter_expr)
     )
     transaction = result.scalars().first()
     if not transaction:
@@ -185,3 +191,46 @@ async def investigate_payment(
     except Exception as e:
         llm_failures_total.inc()
         raise e
+
+
+# ── Admin: Clear database ─────────────────────────────────────────────────────
+
+@router.delete("/admin/reset-data")
+@limiter.limit("5/minute")
+async def reset_data(
+    request: Request,
+    db: AsyncSession = Depends(deps.get_db),
+    user: CurrentUser = Depends(require_analyst)
+) -> Any:
+    """Clear live transactional data while preserving the ML training dataset."""
+    from sqlalchemy import text as sql_text
+    
+    # Delete risk evaluations and webhooks for non-training transactions
+    await db.execute(sql_text("""
+        DELETE FROM risk_evaluations 
+        WHERE transaction_id IN (
+            SELECT id FROM transactions 
+            WHERE id NOT IN (SELECT transaction_id FROM ground_truth)
+        )
+    """))
+    
+    await db.execute(sql_text("""
+        DELETE FROM webhook_events 
+        WHERE transaction_id IN (
+            SELECT id FROM transactions 
+            WHERE id NOT IN (SELECT transaction_id FROM ground_truth)
+        )
+    """))
+    
+    # Delete the non-training transactions themselves
+    await db.execute(sql_text("""
+        DELETE FROM transactions 
+        WHERE id NOT IN (SELECT transaction_id FROM ground_truth)
+    """))
+    
+    # Clear simulation history (these are safe to drop entirely)
+    await db.execute(sql_text('TRUNCATE TABLE simulation_runs RESTART IDENTITY CASCADE'))
+    
+    await db.commit()
+    return {"status": "ok", "message": "Live transactions cleared. ML training dataset preserved."}
+

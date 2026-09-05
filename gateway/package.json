@@ -1,0 +1,1 @@
+{"name":"riskshield-gateway","version":"1.0.0","scripts":{"dev":"npx serve . -p 3001 --cors","start":"npx serve . -p 3001 --cors"}}

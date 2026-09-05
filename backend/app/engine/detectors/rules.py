@@ -109,6 +109,21 @@ class SharedIpDetector(BaseDetector):
             )
         return None
 
+class MicroTransactionDetector(BaseDetector):
+    def evaluate(self, context: FeatureContext) -> Optional[RiskSignal]:
+        amount = context.request.amount
+        
+        # Extremely small transactions (e.g. $1 or $2) are classic card testing probes
+        if amount < 2.50:
+            return RiskSignal(
+                name="micro_transaction",
+                value=1.0,
+                severity=RiskLevel.CRITICAL,
+                explanation=f"Transaction amount (${amount:.2f}) is extremely small, indicative of card testing.",
+                evidence={"amount": amount}
+            )
+        return None
+
 from app.engine.detectors.ml_detector import MlFraudDetector
 
 ALL_DETECTORS = [
@@ -118,5 +133,6 @@ ALL_DETECTORS = [
     GeographicAnomalyDetector(),
     FailedPaymentSequenceDetector(),
     SharedIpDetector(),
+    MicroTransactionDetector(),
     MlFraudDetector()
 ]
