@@ -16,8 +16,8 @@ class MlFraudDetector(BaseDetector):
         prob = self.loader.predict_proba(context)
         threshold = self.loader.threshold
 
-        # CRITICAL: above the precision-optimised threshold — very high confidence
-        if prob >= threshold:
+        # CRITICAL: extremely high confidence
+        if prob >= max(threshold, 0.95):
             return RiskSignal(
                 name="ml_fraud_model",
                 value=prob,
@@ -26,8 +26,8 @@ class MlFraudDetector(BaseDetector):
                 evidence={"fraud_probability": prob, "threshold": threshold, "model_version": "v2"}
             )
 
-        # HIGH: within 10 pp of the threshold — elevated suspicion
-        if prob >= max(threshold - 0.10, 0.60):
+        # HIGH: elevated suspicion
+        if prob >= max(threshold - 0.10, 0.85):
             return RiskSignal(
                 name="ml_fraud_model",
                 value=prob,
@@ -36,8 +36,8 @@ class MlFraudDetector(BaseDetector):
                 evidence={"fraud_probability": prob, "threshold": threshold, "model_version": "v2"}
             )
 
-        # MEDIUM: above 0.40 — worth noting
-        if prob >= 0.40:
+        # MEDIUM: worth noting
+        if prob >= 0.70:
             return RiskSignal(
                 name="ml_fraud_model",
                 value=prob,

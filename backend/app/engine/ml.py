@@ -4,6 +4,7 @@ import json
 import pandas as pd
 import numpy as np
 from app.engine.features.extractor import FeatureContext
+from datetime import datetime
 
 
 class FraudModelLoader:
@@ -48,11 +49,11 @@ class FraudModelLoader:
             'amount_log':               np.log1p(amount),
             'is_micro_transaction':     int(amount < 2.50),
             'is_round_amount':          int(amount % 100 == 0),
-            # Time — we don't have request timestamp easily here; use defaults
-            'hour_of_day':              0,
-            'is_night':                 0,
-            'day_of_week':              0,
-            'is_weekend':               0,
+            # Time
+            'hour_of_day':              datetime.utcnow().hour,
+            'is_night':                 int(datetime.utcnow().hour < 6 or datetime.utcnow().hour > 22),
+            'day_of_week':              datetime.utcnow().weekday(),
+            'is_weekend':               int(datetime.utcnow().weekday() >= 5),
             # Customer history
             'historical_tx_count':      context.customer_historical_tx_count,
             'historical_avg_amount':    avg_amount,
