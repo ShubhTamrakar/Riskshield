@@ -36,11 +36,12 @@ services:
     volumes:
       - ./backend:/app
     environment:
+      - DATABASE_URL=${DATABASE_URL}
       - POSTGRES_SERVER=db
       - POSTGRES_USER=${POSTGRES_USER:-postgres}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
       - POSTGRES_DB=${POSTGRES_DB:-riskshield}
-      - REDIS_URL=redis://redis:6379/0
+      - REDIS_URL=${REDIS_URL}
       - ENVIRONMENT=${ENVIRONMENT:-development}
       - API_KEY_HASH=${API_KEY_HASH:-}
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001}
