@@ -25,68 +25,62 @@ function fmtTime(iso: string) {
   return new Date(iso).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
 }
 
-// Dashboard summary derived from transactions
-function buildSummary(txs: Transaction[], totalFromServer: number) {
-  const dist: Record<RiskLevel, number> = { LOW: 0, MEDIUM: 0, HIGH: 0, CRITICAL: 0 };
-  let high_risk = 0, blocked = 0, review = 0, approved = 0;
-  let fraud_exposure = 0;
 
-  const hourBuckets: Record<string, number> = {};
-  txs.forEach(tx => {
-    const lvl = tx.risk_evaluation?.risk_level;
-    const dec = tx.risk_evaluation?.decision;
-    if (lvl) dist[lvl] = (dist[lvl] ?? 0) + 1;
-    if (dec === 'APPROVE') approved++;
-    else if (dec === 'BLOCK') blocked++;
-    else if (dec === 'REVIEW') review++;
-
-    if (lvl === 'HIGH' || lvl === 'CRITICAL') {
-      high_risk++;
-      if (dec !== 'BLOCK') {
-        fraud_exposure += tx.amount;
-      }
-    }
-
-    // Build hourly chart data
-    const h = new Date(tx.created_at).getHours();
-    const key = `${h.toString().padStart(2,'0')}:00`;
-    hourBuckets[key] = (hourBuckets[key] ?? 0) + 1;
-  });
-
-  const chartData = Object.entries(hourBuckets)
-    .sort(([a],[b]) => a.localeCompare(b))
-    .map(([time, count]) => ({ time, count }));
-
-  const total = txs.length || 1; // avoid division by zero
-  
-  return {
-    total_transactions: totalFromServer,
-    high_risk,
-    blocked,
-    review,
-    approved,
-    approval_rate: (approved / total) * 100,
-    review_rate: (review / total) * 100,
-    blocked_rate: (blocked / total) * 100,
-    fraud_exposure,
-    risk_distribution: dist,
-    chartData,
-  };
-}
 
 export default function DashboardPage() {
   const router = useRouter();
   const [txs, setTxs] = useState<Transaction[]>([]);
   const [total, setTotal] = useState<number>(0);
+  const [summary, setSummary] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchData = () => {
-      api.getTransactions({ size: 50 })
-        .then(r => {
+      Promise.all([
+        api.getTransactions({ size: 50 }),
+        api.getDashboardSummary()
+      ])
+        .then(([r, s]) => {
           setTxs(r.items);
           setTotal(r.total);
+          
+          const totalTxs = s.total_transactions || 1;
+          const approved = s.total_transactions - s.blocked - s.review;
+          
+          const hourBuckets: Record<string, number> = {};
+          r.items.forEach(tx => {
+            const h = new Date(tx.created_at).getHours();
+            const key = `${h.toString().padStart(2,'0')}:00`;
+            hourBuckets[key] = (hourBuckets[key] ?? 0) + 1;
+          });
+          const chartData = Object.entries(hourBuckets)
+            .sort(([a],[b]) => a.localeCompare(b))
+            .map(([time, count]) => ({ time, count }));
+
+          let fraud_exposure = 0;
+          r.items.forEach(tx => {
+             const lvl = tx.risk_evaluation?.risk_level;
+             const dec = tx.risk_evaluation?.decision;
+             if ((lvl === 'HIGH' || lvl === 'CRITICAL') && dec !== 'BLOCK') {
+                 fraud_exposure += tx.amount;
+             }
+          });
+          
+          setSummary({
+            total_transactions: s.total_transactions,
+            approval_rate: (approved / totalTxs) * 100,
+            review_rate: (s.review / totalTxs) * 100,
+            blocked_rate: (s.blocked / totalTxs) * 100,
+            fraud_exposure,
+            risk_distribution: {
+                LOW: s.risk_distribution.LOW || 0,
+                MEDIUM: s.risk_distribution.MEDIUM || 0,
+                HIGH: s.risk_distribution.HIGH || 0,
+                CRITICAL: s.risk_distribution.CRITICAL || 0
+            },
+            chartData
+          });
           setError(null);
         })
         .catch(e => setError(e.message))
@@ -97,8 +91,6 @@ export default function DashboardPage() {
     const interval = setInterval(fetchData, 2000);
     return () => clearInterval(interval);
   }, []);
-
-  const summary = !loading && !error ? buildSummary(txs, total) : null;
 
   const recentAlerts = txs
     .filter(t => (t.risk_evaluation?.risk_level === 'HIGH' || t.risk_evaluation?.risk_level === 'CRITICAL'))

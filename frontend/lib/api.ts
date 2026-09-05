@@ -46,7 +46,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export type RiskLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
-export type Decision  = 'APPROVE' | 'REVIEW' | 'BLOCK';
+export type Decision  = 'APPROVE' | 'REVIEW' | 'BLOCK' | 'MONITOR';
 export type TxStatus  = 'pending' | 'completed' | 'failed' | 'blocked';
 
 export interface RiskSignal {

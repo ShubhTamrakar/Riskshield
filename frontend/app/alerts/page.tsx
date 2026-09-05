@@ -36,15 +36,15 @@ export default function AlertsPage() {
           <div className="page-desc">High and Critical risk events requiring analyst action</div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          {[
-            { value: 'REVIEW', label: 'Requires Review' },
-            { value: 'BLOCK', label: 'Auto-Blocked' },
-            { value: '', label: 'All Alerts' }
-          ].map(f => (
+          {([
+            { value: 'REVIEW' as const, label: 'Requires Review' },
+            { value: 'BLOCK' as const, label: 'Auto-Blocked' },
+            { value: '' as const, label: 'All Alerts' }
+          ]).map(f => (
             <button
               key={f.value}
               className={`btn ${filter === f.value ? 'btn-primary' : 'btn-secondary'}`}
-              onClick={() => setFilter(f.value as any)}
+              onClick={() => setFilter(f.value)}
             >
               {f.label}
             </button>
