@@ -519,7 +519,6 @@
       for(let i=1; i<=2; i++) {
         let r = JSON.parse(JSON.stringify(baseReq));
         r.external_transaction_id = 'txn_bg_dev' + i + '_' + Math.random().toString(36).slice(2);
-        r.device.device_fingerprint = 'dev_known_' + i + '_' + r.customer.external_customer_id.replace(/\D/g,'');
         // Set to a normal baseline location to avoid impossible travel noise
         r.amount = 799;
         r.ip_address = '49.36.100.12';
