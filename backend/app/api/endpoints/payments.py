@@ -230,6 +230,11 @@ async def reset_data(
     """Clear live transactional data while preserving the ML training dataset."""
     from sqlalchemy import text as sql_text
     
+    # Delete temporary background seeds from the ground truth list
+    await db.execute(sql_text("""
+        DELETE FROM ground_truth WHERE fraud_scenario = 'background_seed'
+    """))
+    
     # Delete risk evaluations and webhooks for non-training transactions
     await db.execute(sql_text("""
         DELETE FROM risk_evaluations 
