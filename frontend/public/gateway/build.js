@@ -452,7 +452,7 @@ const html = `<!DOCTYPE html>
     };
 
     try {
-      const res = await fetch('http://localhost:8000/payments', {
+      const res = await fetch('https://riskshield-backend-x6h5.onrender.com/payments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
