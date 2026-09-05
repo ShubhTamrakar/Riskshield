@@ -226,21 +226,14 @@ async def reset_data(
         )
     """))
     
-    await db.execute(sql_text("""
-        DELETE FROM webhook_events 
-        WHERE transaction_id IN (
-            SELECT id FROM transactions 
-            WHERE id NOT IN (SELECT transaction_id FROM ground_truth)
-        )
-    """))
-    
     # Delete the non-training transactions themselves
     await db.execute(sql_text("""
         DELETE FROM transactions 
         WHERE id NOT IN (SELECT transaction_id FROM ground_truth)
     """))
-    
-    # Clear simulation history (these are safe to drop entirely)
+
+    # Clear simulation history and webhooks (these are safe to drop entirely)
+    await db.execute(sql_text('TRUNCATE TABLE webhook_events RESTART IDENTITY CASCADE'))
     await db.execute(sql_text('TRUNCATE TABLE simulation_runs RESTART IDENTITY CASCADE'))
     
     await db.commit()
