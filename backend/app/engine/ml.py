@@ -84,6 +84,27 @@ class FraudModelLoader:
             print(f"ML Model prediction failed: {e}")
             return 0.0
 
+    def explain_prediction(self, context: FeatureContext) -> list[str]:
+        df = self._build_features(context)
+        reasons = []
+        if df['is_new_device'].iloc[0] == 1:
+            reasons.append("unseen device")
+        if df['is_impossible_travel'].iloc[0] == 1:
+            reasons.append("impossible travel")
+        if df['velocity_1h'].iloc[0] > 5:
+            reasons.append("high velocity")
+        if df['amount_zscore'].iloc[0] > 3:
+            reasons.append("unusually large amount")
+        if df['is_micro_transaction'].iloc[0] == 1:
+            reasons.append("micro transaction pattern")
+        if df['ip_customer_count'].iloc[0] > 3:
+            reasons.append("shared IP address")
+            
+        if not reasons:
+            reasons.append("complex anomaly pattern")
+            
+        return reasons
+
     @property
     def threshold(self) -> float:
         return self._threshold

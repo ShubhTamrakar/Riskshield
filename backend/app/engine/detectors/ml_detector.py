@@ -15,6 +15,9 @@ class MlFraudDetector(BaseDetector):
 
         prob = self.loader.predict_proba(context)
         threshold = self.loader.threshold
+        
+        reasons = self.loader.explain_prediction(context)
+        reasons_str = ", ".join(reasons)
 
         # CRITICAL: extremely high confidence
         if prob >= max(threshold, 0.95):
@@ -22,7 +25,7 @@ class MlFraudDetector(BaseDetector):
                 name="ml_fraud_model",
                 value=prob,
                 severity=RiskLevel.CRITICAL,
-                explanation=f"ML model predicts fraud with {prob:.1%} probability (threshold: {threshold:.1%}).",
+                explanation=f"ML predicts fraud with {prob:.1%} probability. Key factors: {reasons_str}.",
                 evidence={"fraud_probability": prob, "threshold": threshold, "model_version": "v2"}
             )
 
@@ -32,7 +35,7 @@ class MlFraudDetector(BaseDetector):
                 name="ml_fraud_model",
                 value=prob,
                 severity=RiskLevel.HIGH,
-                explanation=f"ML model flags elevated fraud probability ({prob:.1%}).",
+                explanation=f"ML flags elevated fraud probability ({prob:.1%}). Key factors: {reasons_str}.",
                 evidence={"fraud_probability": prob, "threshold": threshold, "model_version": "v2"}
             )
 
@@ -42,7 +45,7 @@ class MlFraudDetector(BaseDetector):
                 name="ml_fraud_model",
                 value=prob,
                 severity=RiskLevel.MEDIUM,
-                explanation=f"ML model reports a moderate fraud probability ({prob:.1%}).",
+                explanation=f"ML reports a moderate fraud probability ({prob:.1%}). Key factors: {reasons_str}.",
                 evidence={"fraud_probability": prob, "threshold": threshold, "model_version": "v2"}
             )
 
