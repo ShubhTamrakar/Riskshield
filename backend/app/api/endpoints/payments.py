@@ -91,25 +91,37 @@ async def get_summary(
     db: AsyncSession = Depends(deps.get_db),
     user: CurrentUser = Depends(get_current_user)
 ) -> Any:
-    result = await db.execute(
-        select(Transaction).options(selectinload(Transaction.risk_evaluation))
-    )
-    txs = result.scalars().all()
+    # 1. Total transactions
+    total = await db.scalar(select(func.count(Transaction.id))) or 0
+    
+    # 2. Grouped counts
     dist = {"LOW": 0, "MEDIUM": 0, "HIGH": 0, "CRITICAL": 0}
     high_risk = blocked = review = 0
-    for tx in txs:
-        re = tx.risk_evaluation
-        if re:
-            lvl = re.risk_level
-            if lvl in dist: dist[lvl] += 1
-            if lvl in ("HIGH", "CRITICAL"): high_risk += 1
-            if re.decision == "BLOCK":  blocked += 1
-            if re.decision == "REVIEW": review  += 1
+    
+    level_counts = await db.execute(
+        select(RiskEvaluation.risk_level, func.count(RiskEvaluation.id))
+        .group_by(RiskEvaluation.risk_level)
+    )
+    for level, count in level_counts:
+        dist[level] = count
+        if level in ("HIGH", "CRITICAL"):
+            high_risk += count
+            
+    decision_counts = await db.execute(
+        select(RiskEvaluation.decision, func.count(RiskEvaluation.id))
+        .group_by(RiskEvaluation.decision)
+    )
+    for decision, count in decision_counts:
+        if decision == "BLOCK":
+            blocked += count
+        elif decision == "REVIEW":
+            review += count
+
     return {
-        "total_transactions": len(txs),
-        "high_risk":  high_risk,
-        "blocked":    blocked,
-        "review":     review,
+        "total_transactions": total,
+        "high_risk": high_risk,
+        "blocked": blocked,
+        "review": review,
         "risk_distribution": dist
     }
 

@@ -84,7 +84,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     const fetchData = () => {
-      api.getTransactions({ size: 200 })
+      api.getTransactions({ size: 50 })
         .then(r => {
           setTxs(r.items);
           setTotal(r.total);
