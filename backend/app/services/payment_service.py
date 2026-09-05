@@ -89,6 +89,17 @@ async def process_payment(db: AsyncSession, payload: PaymentRequest) -> Transact
     )
     db.add(risk_eval)
     
+    if getattr(payload, "is_background_seed", False):
+        from app.models.ground_truth import GroundTruth
+        from datetime import datetime
+        gt = GroundTruth(
+            transaction_id=transaction.id,
+            label="legit",
+            fraud_scenario="background_seed",
+            created_at=datetime.utcnow()
+        )
+        db.add(gt)
+    
     await db.commit()
     await db.refresh(transaction)
     await db.refresh(risk_eval)

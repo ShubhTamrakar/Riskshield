@@ -23,6 +23,8 @@ class PaymentRequest(BaseModel):
     customer: CustomerCreate
     merchant: MerchantCreate
     device: Optional[DeviceCreate] = None
+    
+    is_background_seed: bool = False
 
 class TransactionResponse(BaseModel):
     id: uuid.UUID

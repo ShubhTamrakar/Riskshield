@@ -527,6 +527,7 @@
         r.city = 'Kanpur';
         r.latitude = 26.449;
         r.longitude = 80.331;
+        r.is_background_seed = true;
         bgRequests.push(r);
       }
 
@@ -535,6 +536,7 @@
         let r = JSON.parse(JSON.stringify(baseReq));
         r.external_transaction_id = 'txn_bg_' + Math.random().toString(36).slice(2);
         r.amount = 799;
+        r.is_background_seed = true;
         bgRequests.push(r);
       } else if (activeSceneKey === 'velocity') {
         // Fire 6 rapid transactions to trigger rate limiter
@@ -552,6 +554,7 @@
         r.city = 'Kanpur';
         r.latitude = 26.449;
         r.longitude = 80.331;
+        r.is_background_seed = true;
         bgRequests.push(r);
       } else if (activeSceneKey === 'shared_device') {
         // Share this same device fingerprint across 4 other users
