@@ -36,7 +36,7 @@ function buildSummary(txs: Transaction[], totalFromServer: number) {
     const lvl = tx.risk_evaluation?.risk_level;
     const dec = tx.risk_evaluation?.decision;
     if (lvl) dist[lvl] = (dist[lvl] ?? 0) + 1;
-    if (dec === 'APPROVE' || dec === 'MONITOR') approved++;
+    if (dec === 'APPROVE') approved++;
     else if (dec === 'BLOCK') blocked++;
     else if (dec === 'REVIEW') review++;
 
