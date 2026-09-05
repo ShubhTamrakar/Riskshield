@@ -18,7 +18,7 @@ export default function AlertsPage() {
   const [txs, setTxs] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [filter, setFilter] = useState<'REVIEW' | 'BLOCK' | ''>('REVIEW');
+  const [filter, setFilter] = useState<'REVIEW' | 'BLOCK' | ''>('');
 
   useEffect(() => {
     // Fetch actionable alerts (Review queue or Blocked)
