@@ -569,12 +569,7 @@
           r.amount = 1;
           bgRequests.push(r);
         }
-      } else if (activeSceneKey === 'normal') {
-        // Just one previous legit transaction so it's not a "new device"
-        let r = JSON.parse(JSON.stringify(baseReq));
-        r.external_transaction_id = 'txn_bg_' + Math.random().toString(36).slice(2);
-        bgRequests.push(r);
-      }
+
 
       // Send background requests sequentially
       for (let req of bgRequests) {
